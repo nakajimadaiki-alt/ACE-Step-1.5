@@ -1,0 +1,106 @@
+.timeline-container {
+    height: 240px;
+    background-color: var(--bg-timeline);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+}
+
+.timeline-toolbar {
+    height: 48px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.playback-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.play-button {
+    background: var(--accent-color);
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.time-display {
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.frame-count {
+    margin-left: 10px;
+    color: var(--text-main);
+}
+
+.scroll-container {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+}
+
+.timeline-tracks {
+    height: 100%;
+    position: relative;
+    background: repeating-linear-gradient(to right,
+            transparent,
+            transparent 19px,
+            rgba(255, 255, 255, 0.05) 19px,
+            rgba(255, 255, 255, 0.05) 20px);
+}
+
+.timeline-ruler {
+    height: 30px;
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ruler-tick {
+    position: absolute;
+    top: 15px;
+    width: 1px;
+    height: 15px;
+    background: var(--border-color);
+}
+
+.ruler-tick.major {
+    height: 15px;
+    top: 15px;
+}
+
+.tick-label {
+    position: absolute;
+    top: -18px;
+    left: 3px;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.playhead {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 100%;
+    background: #ff4d4d;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.playhead::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 10px;
+    height: 10px;
+    background: #ff4d4d;
+    clip-path: polygon(50% 100%, 0 0, 100% 0);
+}

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eslint:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(node scripts/export-video.mjs:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(npm run export:*)",
+      "Bash(node --check:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\n_dai\\\\OneDrive\\\\デスクトップ\\\\video_editor\\\\src\\\\hooks\"\" 2>/dev/null || echo \"hooks directory may not exist \")"
+    ]
+  }
+}

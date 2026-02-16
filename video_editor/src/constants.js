@@ -1,0 +1,4 @@
+export const FPS = 30;
+export const DEFAULT_DURATION_SECONDS = 5;
+export const DEFAULT_DURATION_FRAMES = DEFAULT_DURATION_SECONDS * FPS;
+export const DISC_ROTATION_SECONDS = 25;
