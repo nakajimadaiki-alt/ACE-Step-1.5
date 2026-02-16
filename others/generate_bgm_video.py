@@ -1,9 +1,19 @@
 import argparse
 import os
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, vfx
+import argparse
+import os
+from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+try:
+    from moviepy.video.fx import Loop, Rotate
+except ImportError:
+    # Fallback
+    import moviepy.video.fx as vfx
+    Loop = vfx.Loop
+    Rotate = vfx.Rotate
+
 import numpy as np
 
-def generate_bgm_video(audio_path, output_path, video_path=None, image_path=None, rotation_speed=0.2):
+def generate_bgm_video(audio_path, output_path, video_path=None, image_path=None, style="static", rotation_speed=0.2, test_duration=None):
     """
     Generates a BGM video by combining audio with a video loop or a rotating image.
 
@@ -22,6 +32,11 @@ def generate_bgm_video(audio_path, output_path, video_path=None, image_path=None
 
     # Load audio
     audio_clip = AudioFileClip(audio_path)
+    
+    if test_duration:
+        print(f"Test mode: Truncating to {test_duration} seconds")
+        audio_clip = audio_clip.subclipped(0, test_duration)
+
     audio_duration = audio_clip.duration
     print(f"Audio Duration: {audio_duration:.2f} seconds")
 
@@ -35,7 +50,7 @@ def generate_bgm_video(audio_path, output_path, video_path=None, image_path=None
         video_clip = VideoFileClip(video_path)
         
         # Loop the video to match audio duration
-        final_clip = video_clip.fx(vfx.loop, duration=audio_duration)
+        final_clip = video_clip.with_effects([Loop(duration=audio_duration)])
         
     elif image_path:
         if not os.path.exists(image_path):
@@ -47,23 +62,37 @@ def generate_bgm_video(audio_path, output_path, video_path=None, image_path=None
         # Simple rotation:
         img_clip = ImageClip(image_path).set_duration(audio_duration)
         
-        # Rotation function: t -> angle
-        # speed * 360 * t
-        def rotate_filter(t):
-            return rotation_speed * 360 * t
+        print(f"Using image: {image_path} with style: {style}")
+        # Create an image clip
+        img_clip = ImageClip(image_path).with_duration(audio_duration)
+        
+        if style == "disc":
+            # Rotation function: t -> angle
+            # speed * 360 * t
+            def rotate_filter(t):
+                return rotation_speed * 360 * t
 
-        # Apply rotation
-        # Note: 'rotate' might crop if not resized properly. 
-        # For a circular image on a black background, it should be fine if centered.
-        final_clip = img_clip.add_mask().rotate(rotate_filter, expand=False)
+            # Apply rotation and circle mask (naive approach)
+            # For strict circle mask, we might need composite mask. 
+            # MoviePy 2.0+ `add_mask` behaves differently? 
+            # Let's just do rotation for now, implementing mask in moviepy can be tricky without ImageMagick sometimes.
+            # But typically we want a circle. 
+            
+            # TODO: Add specific circle mask if needed. For now assuming input is okay or just rotating.
+            final_clip = img_clip.with_effects([Rotate(lambda t: rotation_speed * 360 * t, expand=False)])
+        else:
+            # Static style
+            # Just resize to maintain aspect ratio or fill? 
+            # For simplicity, let's keep it as is (fitting 1920x1080 usually handled by player, but let's leave it raw)
+             final_clip = img_clip
         
         # If we want a background, we can composite. 
-        # For now, let's keep it simple: just the rotating image on black (default).
+        # For now, let's keep it simple: just the image on black (default).
     else:
         raise ValueError("Either --video or --image must be provided.")
 
     # Set audio
-    final_clip = final_clip.set_audio(audio_clip)
+    final_clip = final_clip.with_audio(audio_clip)
 
     # Write output
     print(f"Writing video to: {output_path}")
@@ -82,8 +111,10 @@ if __name__ == "__main__":
     parser.add_argument("--audio", required=True, help="Path to the audio file (wav, mp3, etc.)")
     parser.add_argument("--output", required=True, help="Path to the output video file (mp4)")
     parser.add_argument("--video", help="Path to a video file to loop")
-    parser.add_argument("--image", help="Path to an image file to rotate")
+    parser.add_argument("--image", help="Path to an image file")
+    parser.add_argument("--style", choices=["static", "disc"], default="static", help="Visual style for image input: 'static' or 'disc'")
     parser.add_argument("--speed", type=float, default=0.1, help="Rotation speed (rotations per second) for image mode")
+    parser.add_argument("--test-duration", type=float, help="Duration in seconds for testing purposes")
 
     args = parser.parse_args()
 
@@ -92,5 +123,7 @@ if __name__ == "__main__":
         output_path=args.output,
         video_path=args.video,
         image_path=args.image,
-        rotation_speed=args.speed
+        style=args.style,
+        rotation_speed=args.speed,
+        test_duration=args.test_duration
     )

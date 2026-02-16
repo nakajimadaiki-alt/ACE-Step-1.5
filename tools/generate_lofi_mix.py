@@ -101,7 +101,23 @@ def generate_track(index):
         print(f"Error during generation: {e}")
         return None
 
+import argparse
+
+# ... existing code ...
+
 def main():
+    parser = argparse.ArgumentParser(description="Generate Lofi Mix")
+    parser.add_argument("--num_tracks", type=int, default=15, help="Number of tracks to generate")
+    parser.add_argument("--track_duration", type=int, default=240, help="Duration per track in seconds")
+    parser.add_argument("--output_dir", type=str, default="lofi_mix_output", help="Output directory")
+    args = parser.parse_args()
+
+    # Override global settings with args
+    global NUM_TRACKS, TRACK_DURATION, OUTPUT_DIR
+    NUM_TRACKS = args.num_tracks
+    TRACK_DURATION = args.track_duration
+    OUTPUT_DIR = args.output_dir
+
     if not check_server():
         print("Error: ACE-Step server is not running or not accessible at http://127.0.0.1:7860")
         print("Please start it with: uv run acestep --enable-api ...")
@@ -110,7 +126,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     generated_files = []
 
-    print("=== Starting Lofi Mix Generator (Refined Version) ===")
+    print(f"=== Starting Lofi Mix Generator (Target: {NUM_TRACKS} tracks) ===")
     
     # 1. Generate Tracks
     for i in range(NUM_TRACKS):
@@ -147,7 +163,7 @@ def main():
         
         print(f"Exporting final refined mix to {output_filename}...")
         mix.export(output_filename, format="wav")
-        print("Done!")
+        print(f"Done! Created: {output_filename}") # Added clearer success message for parsing
         
     except Exception as e:
         print(f"Error during mixing: {e}")

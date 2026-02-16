@@ -1,0 +1,328 @@
+import gradio as gr
+import os
+import glob
+from generate_bgm_video import generate_bgm_video
+import time
+import subprocess
+import threading
+
+# --- Constants & Config ---
+# Paths are relative to the project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if os.path.basename(current_dir) == "others":
+    PROJECT_ROOT = os.path.dirname(current_dir)
+else:
+    PROJECT_ROOT = current_dir
+
+AUDIO_DIR = os.path.join(PROJECT_ROOT, "lofi_mix_output")
+VIDEO_DIR = os.path.join(PROJECT_ROOT, "video_editor", "dist")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "bgm_output")
+LOFI_SCRIPT = os.path.join(PROJECT_ROOT, "tools", "generate_lofi_mix.py")
+
+import sys
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+# Ensure directories exist
+for d in [OUTPUT_DIR, AUDIO_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+# --- Helpers ---
+def list_files(directory, extensions):
+    """ディレクトリ内の指定拡張子のファイルを更新日時順（新しい順）で取得"""
+    if not os.path.exists(directory):
+        return []
+    files = []
+    for ext in extensions:
+        files.extend(glob.glob(os.path.join(directory, f"*.{ext}")))
+    return sorted(files, key=os.path.getmtime, reverse=True)
+
+def get_audio_choices():
+    return list_files(AUDIO_DIR, ["wav", "mp3"])
+
+def get_video_choices():
+    return list_files(VIDEO_DIR, ["mp4", "mov"])
+
+# --- Wrappers ---
+def generate_lofi_wrapper(num_tracks, track_duration, custom_prompt):
+    """Lofi生成スクリプトを実行"""
+    try:
+        python_exe = os.sys.executable
+        cmd = [
+            python_exe, LOFI_SCRIPT,
+            "--num_tracks", str(int(num_tracks)),
+            "--track_duration", str(int(track_duration))
+        ]
+        
+        # カスタムプロンプトがあれば追加
+        if custom_prompt and custom_prompt.strip():
+            cmd.extend(["--prompt", custom_prompt.strip()])
+            gr.Info(f"生成中: {custom_prompt} ({int(num_tracks)}曲)...")
+        else:
+            gr.Info(f"Lofi生成中 ({int(num_tracks)}曲)...")
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            raise Exception(f"スクリプトエラー: {stderr}")
+            
+        gr.Info("音楽生成完了！")
+        
+        # リストを更新して最新を選択
+        choices = get_audio_choices()
+        return gr.update(choices=choices, value=choices[0] if choices else None)
+        
+    except Exception as e:
+        raise gr.Error(f"生成エラー: {str(e)}")
+
+
+def final_generation_wrapper(
+    audio_path, 
+    visual_mode, # "動画ループ" or "静止画 (ディスク)" or "静止画 (固定)"
+    video_path, 
+    image_path, 
+    rotation_speed, 
+    output_filename, 
+    test_mode
+):
+    if not audio_path:
+        raise gr.Error("Phase 1 エラー: 音声ファイルが選択されていません。")
+    
+    final_video_path = None
+    style = "static"
+    
+    # Visual Mode Mapping
+    # "動画ループ (Video Loop)" -> Video
+    # "静止画 - 回転ディスク (Rotating Disk)" -> Image, style=disc
+    # "静止画 - 固定表示 (Static Image)" -> Image, style=static
+    
+    if visual_mode == "動画ループ (Video Loop)":
+        if not video_path:
+             raise gr.Error("Phase 2 エラー: 動画ファイルが選択されていません。")
+        final_video_path = video_path
+    elif "静止画" in visual_mode:
+        if not image_path:
+             raise gr.Error("Phase 2 エラー: 画像ファイルがアップロードされていません。")
+        final_video_path = None
+        style = "disc" if "回転ディスク" in visual_mode else "static"
+    
+    # Output Path
+    if not output_filename:
+        output_filename = f"bgm_{int(time.time())}"
+    if not output_filename.endswith(".mp4"):
+        output_filename += ".mp4"
+    output_path = os.path.join(OUTPUT_DIR, output_filename)
+    
+    test_duration = 20 if test_mode else None
+
+    # Calculate rotation speed (rotations/sec)
+    # Speed = 1 / Period
+    rotation_speed = 1.0 / float(rotation_period) if rotation_period > 0 else 0.1
+
+    try:
+        gr.Info("動画生成中...しばらくお待ちください。")
+        generate_bgm_video(
+            audio_path=audio_path,
+            output_path=output_path,
+            video_path=final_video_path,
+            image_path=image_path if "静止画" in visual_mode else None,
+            style=style,
+            rotation_speed=rotation_speed,
+            test_duration=test_duration
+        )
+        gr.Info("生成完了！")
+        return output_path, gr.update(visible=True)
+    except Exception as e:
+        raise gr.Error(f"動画生成エラー: {str(e)}")
+
+# --- UI Construction ---
+css = """
+.container { max-width: 900px; margin: auto; }
+.phase-header { font-size: 1.2em; margin-bottom: 10px; font-weight: bold; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+.step-nav { margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }
+"""
+
+with gr.Blocks(title="BGM Generator Wizard", css=css) as app:
+    gr.Markdown("# 🧙‍♂️ 作業用BGM動画作成ウィザード")
+    
+    # State
+    selected_audio = gr.State()
+    selected_visual_mode = gr.State(value="動画ループ (Video Loop)")
+    selected_video = gr.State()
+    selected_image = gr.State()
+
+    with gr.Column(elem_classes="container"):
+        
+        # --- PHASE 1: AUDIO ---
+        with gr.Group(visible=True) as phase1:
+            gr.Markdown("## 🎵 Phase 1: 音楽の準備", elem_classes="phase-header")
+            
+            with gr.Tabs():
+                with gr.Tab("ライブラリから選択"):
+                    audio_dropdown = gr.Dropdown(
+                        label="作成済み・既存の音楽ファイル", 
+                        choices=get_audio_choices(), 
+                        value=lambda: get_audio_choices()[0] if get_audio_choices() else None, 
+                        interactive=True
+                    )
+                    refresh_audio_btn = gr.Button("🔄 リスト更新", size="sm")
+                    audio_upload = gr.File(label="ファイルをアップロード", type="filepath")
+
+                with gr.Tab("新しく生成する (AI)"):
+                    gr.Markdown("設定を入力して「音楽を生成」を押してください。")
+                    custom_prompt = gr.Textbox(
+                        label="生成プロンプト (自由記述)", 
+                        placeholder="例: chill beats, jazz piano, epic orchestral, cyber punk...", 
+                        info="好みのジャンルや雰囲気を入力してください。空欄の場合は「Lofi Hip Hop」が自動生成されます。"
+                    )
+                    with gr.Row():
+                        num_tracks = gr.Slider(minimum=1, maximum=20, value=3, step=1, label="生成する曲数 (トラック数)")
+                        track_duration = gr.Slider(minimum=60, maximum=300, value=120, step=10, label="1曲あたりの長さ (秒)")
+                    
+                    gen_lofi_btn = gr.Button("✨ 音楽を生成する", variant="secondary")
+
+            with gr.Row(elem_classes="step-nav"):
+                to_phase2_btn = gr.Button("次へ: 映像の設定 ➡", variant="primary")
+
+        # --- PHASE 2: VISUAL ---
+        with gr.Group(visible=False) as phase2:
+            gr.Markdown("## 📺 Phase 2: 映像の選択", elem_classes="phase-header")
+            
+            visual_mode = gr.Radio(
+                ["動画ループ (Video Loop)", "静止画 - 回転ディスク (Rotating Disk)", "静止画 - 固定表示 (Static Image)"], 
+                label="映像モード", 
+                value="動画ループ (Video Loop)"
+            )
+            
+            # Mode 1: Video Loop
+            with gr.Group(visible=True) as video_group:
+                gr.Markdown("### 動画ループ素材")
+                video_dropdown = gr.Dropdown(
+                    label="ライブラリから選択", 
+                    choices=get_video_choices(), 
+                    value=lambda: get_video_choices()[0] if get_video_choices() else None
+                )
+                refresh_video_btn = gr.Button("🔄 リスト更新", size="sm")
+                video_upload2 = gr.File(label="または動画をアップロード", type="filepath")
+
+            # Mode 2 & 3: Image
+            with gr.Group(visible=False) as image_group:
+                gr.Markdown("### 静止画素材")
+                image_upload2 = gr.File(label="画像をアップロード", type="filepath")
+                
+                with gr.Group(visible=False) as disk_settings:
+                    rotation_period = gr.Slider(
+                        minimum=1, maximum=60, value=10, step=1, 
+                        label="回転周期 (秒/回転)", 
+                        info="ディスクが1回転するのにかかる時間 (秒)"
+                    )
+
+            with gr.Row(elem_classes="step-nav"):
+                back_to_phase1_btn = gr.Button("⬅ 戻る: 音楽")
+                to_phase3_btn = gr.Button("次へ: 生成と確認 ➡", variant="primary")
+
+        # --- PHASE 3: COMBINE ---
+        with gr.Group(visible=False) as phase3:
+            gr.Markdown("## 🎬 Phase 3: 生成・プレビュー", elem_classes="phase-header")
+            
+            gr.Markdown("以下の設定で動画を生成します。")
+            summary_text = gr.Markdown("...")
+            
+            with gr.Row():
+                output_filename = gr.Textbox(
+                    label="出力ファイル名", 
+                    value=f"bgm_video_{int(time.time())}", 
+                    placeholder="拡張子(.mp4)は自動付与"
+                )
+                test_mode = gr.Checkbox(
+                    label="テストモード (高速・冒頭20秒のみ)", 
+                    value=False,
+                    info="動作確認用に短時間で生成します"
+                )
+            
+            generate_final_btn = gr.Button("🚀 動画を生成する", variant="primary", scale=2)
+            
+            output_video_player = gr.Video(label="プレビュー", interactive=False)
+            
+            with gr.Row(elem_classes="step-nav"):
+                back_to_phase2_btn = gr.Button("⬅ 戻る: 映像")
+
+    # --- LOGIC ---
+
+    # Phase 1 Logic
+    refresh_audio_btn.click(lambda: gr.update(choices=get_audio_choices()), outputs=audio_dropdown)
+    
+    gen_lofi_btn.click(
+        generate_lofi_wrapper,
+        inputs=[num_tracks, track_duration, custom_prompt],
+        outputs=[audio_dropdown]
+    )
+
+    def go_to_phase2(dropdown_val, upload_val):
+        path = upload_val if upload_val else dropdown_val
+        if not path:
+             raise gr.Error("音楽ファイルを選択してください。")
+        return path, gr.update(visible=False), gr.update(visible=True)
+
+    to_phase2_btn.click(
+        go_to_phase2,
+        inputs=[audio_dropdown, audio_upload],
+        outputs=[selected_audio, phase1, phase2]
+    )
+
+    # Phase 2 Logic
+    def toggle_visual_mode(mode):
+        is_video = mode == "動画ループ (Video Loop)"
+        is_image = not is_video
+        is_disk = mode == "静止画 - 回転ディスク (Rotating Disk)"
+        return {
+            video_group: gr.update(visible=is_video),
+            image_group: gr.update(visible=is_image),
+            disk_settings: gr.update(visible=is_disk)
+        }
+    
+    visual_mode.change(toggle_visual_mode, inputs=[visual_mode], outputs=[video_group, image_group, disk_settings])
+    
+    refresh_video_btn.click(lambda: gr.update(choices=get_video_choices()), outputs=video_dropdown)
+
+    def go_to_phase3(mode, vid_drop, vid_up, img_up, audio_path):
+        vid_path = vid_up if vid_up else vid_drop
+        
+        # Summary Creation
+        audio_name = os.path.basename(audio_path) if audio_path else "Unknown"
+        summary = f"**選択された音楽**: `{audio_name}`\n\n"
+        
+        if mode == "動画ループ (Video Loop)":
+            if not vid_path: raise gr.Error("動画を選択してください。")
+            summary += f"**選択された映像**: 動画ループ (`{os.path.basename(vid_path)}`)"
+        else:
+            if not img_up: raise gr.Error("画像をアップロードしてください。")
+            modename = "回転ディスク" if "回転" in mode else "固定表示"
+            summary += f"**選択された映像**: 静止画 - {modename} (`{os.path.basename(img_up)}`)"
+            
+        return (mode, vid_path, img_up, 
+                gr.update(visible=False), gr.update(visible=True), 
+                summary)
+
+    to_phase3_btn.click(
+        go_to_phase3,
+        inputs=[visual_mode, video_dropdown, video_upload2, image_upload2, selected_audio],
+        outputs=[selected_visual_mode, selected_video, selected_image, phase2, phase3, summary_text]
+    )
+
+    back_to_phase1_btn.click(lambda: (gr.update(visible=True), gr.update(visible=False)), outputs=[phase1, phase2])
+    back_to_phase2_btn.click(lambda: (gr.update(visible=True), gr.update(visible=False)), outputs=[phase2, phase3])
+
+    # Phase 3 Logic
+    generate_final_btn.click(
+        final_generation_wrapper,
+        inputs=[selected_audio, selected_visual_mode, selected_video, selected_image, rotation_period, output_filename, test_mode],
+        outputs=[output_video_player, output_video_player]
+    )
+
+if __name__ == "__main__":
+    app.launch()
