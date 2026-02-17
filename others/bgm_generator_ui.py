@@ -5,6 +5,7 @@ from generate_bgm_video import generate_bgm_video
 import time
 import subprocess
 import traceback
+import re
 try:
     from .bgm_ui_flow import build_phase3_selection, has_phase1_selection, resolve_phase1_audio_path
     from .bgm_preview import render_image_adjustment_preview
@@ -138,14 +139,45 @@ def _build_phase3_combined_preview(
         raise gr.Error(str(error))
 
 # --- Wrappers ---
+def _build_progress_md(total_tracks, completed, current_track, phase):
+    """進捗状況をMarkdown文字列で返す。
+
+    phase: "generating" | "mixing" | "done" | "error"
+    """
+    if phase == "done":
+        bar = "\u2588" * 20
+        return f"**\u2705 完了!** {total_tracks}/{total_tracks} トラック\n\n`[{bar}]` 100%"
+    if phase == "error":
+        filled = int(20 * completed / max(total_tracks, 1))
+        bar = "\u2588" * filled + "\u2591" * (20 - filled)
+        return f"**\u274c エラー** {completed}/{total_tracks} トラック\n\n`[{bar}]`"
+    if phase == "mixing":
+        bar = "\u2588" * 18 + "\u2592" * 2
+        return f"**\ud83c\udfb6 ミックス中...** {completed}/{total_tracks} トラック生成済み\n\n`[{bar}]` 90%"
+
+    # generating
+    # 進捗 = (完了トラック数) / 全体、生成中トラックは半分カウント
+    progress = (completed + 0.5) / max(total_tracks, 1) if current_track else completed / max(total_tracks, 1)
+    progress = min(progress, 0.89)  # mixing前は最大89%
+    pct = int(progress * 100)
+    filled = int(20 * progress)
+    bar = "\u2588" * filled + "\u2592" * (20 - filled)
+    status = f"トラック {current_track}/{total_tracks} 生成中..." if current_track else "準備中..."
+    return f"**\ud83c\udfb5 {status}**\n\n`[{bar}]` {pct}%"
+
+
 def generate_lofi_wrapper(num_tracks, track_duration, custom_prompt):
-    """Lofi生成スクリプトを実行 (ジェネレータ: ログをリアルタイム表示)"""
+    """Lofi生成スクリプトを実行 (ジェネレータ: ログ+進捗をリアルタイム表示)"""
+    total = int(num_tracks)
+    completed = 0
+    current_track = 0
+
     try:
         before_choices = get_audio_choices()
         python_exe = os.sys.executable
         cmd = [
             python_exe, "-u", LOFI_SCRIPT,
-            "--num_tracks", str(int(num_tracks)),
+            "--num_tracks", str(total),
             "--track_duration", str(int(track_duration)),
             "--output_dir", AUDIO_DIR,
         ]
@@ -159,28 +191,55 @@ def generate_lofi_wrapper(num_tracks, track_duration, custom_prompt):
         )
 
         log_lines = []
+        phase = "generating"
+        re_track = re.compile(r"\[(\d+)/(\d+)\] Generating:")
+        re_complete = re.compile(r"Generation complete:")
+        re_mixing = re.compile(r"Mixing Tracks|Mixing track")
+
         for line in process.stdout:
-            log_lines.append(line.rstrip())
+            stripped = line.rstrip()
+            log_lines.append(stripped)
             log_text = "\n".join(log_lines[-50:])
-            yield log_text, gr.update()
+
+            # パース: トラック生成開始
+            m = re_track.search(stripped)
+            if m:
+                current_track = int(m.group(1))
+                total = int(m.group(2))
+
+            # パース: トラック生成完了
+            if re_complete.search(stripped):
+                completed += 1
+
+            # パース: ミックス段階
+            if re_mixing.search(stripped):
+                phase = "mixing"
+
+            progress_md = _build_progress_md(total, completed, current_track, phase)
+            yield progress_md, log_text, gr.update()
 
         process.wait()
         full_log = "\n".join(log_lines)
 
         if process.returncode != 0:
-            yield full_log + "\n\n[ERROR] 生成スクリプトが異常終了しました。", gr.update()
+            progress_md = _build_progress_md(total, completed, current_track, "error")
+            yield progress_md, full_log + "\n\n[ERROR] 生成スクリプトが異常終了しました。", gr.update()
             return
 
         choices = get_audio_choices()
         if len(choices) <= len(before_choices):
+            progress_md = _build_progress_md(total, completed, current_track, "error")
             yield (
+                progress_md,
                 full_log + "\n\n[WARNING] 音楽ファイルが生成されませんでした。"
                 "\nACE-Step APIサーバー未起動の可能性があります。",
                 gr.update(),
             )
             return
 
+        progress_md = _build_progress_md(total, completed, current_track, "done")
         yield (
+            progress_md,
             full_log + "\n\n[DONE] 音楽生成完了！",
             gr.update(choices=choices, value=choices[0] if choices else None),
         )
@@ -322,6 +381,7 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
                         track_duration = gr.Slider(minimum=60, maximum=300, value=120, step=10, label="1曲あたりの長さ (秒)")
                     
                     gen_lofi_btn = gr.Button("✨ 音楽を生成する", variant="secondary")
+                    gen_progress_md = gr.Markdown(value="", visible=True)
                     gen_log_output = gr.Textbox(
                         label="生成ログ", lines=8, max_lines=15,
                         interactive=False,
@@ -448,7 +508,7 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
     gen_lofi_btn.click(
         generate_lofi_wrapper,
         inputs=[num_tracks, track_duration, custom_prompt],
-        outputs=[gen_log_output, audio_dropdown],
+        outputs=[gen_progress_md, gen_log_output, audio_dropdown],
     )
 
     def go_to_phase2(dropdown_val, upload_val):
