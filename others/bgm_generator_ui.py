@@ -8,9 +8,15 @@ import traceback
 try:
     from .bgm_ui_flow import build_phase3_selection, has_phase1_selection, resolve_phase1_audio_path
     from .bgm_preview import render_image_adjustment_preview
+    from .bgm_phase_preview import create_combined_preview, create_visual_preview
+    from .bgm_health import health_badge_html
+    from .bgm_cache import cleanup_previews, get_preview_stats
 except ImportError:
     from bgm_ui_flow import build_phase3_selection, has_phase1_selection, resolve_phase1_audio_path
     from bgm_preview import render_image_adjustment_preview
+    from bgm_phase_preview import create_combined_preview, create_visual_preview
+    from bgm_health import health_badge_html
+    from bgm_cache import cleanup_previews, get_preview_stats
 
 # --- Constants & Config ---
 # Paths are relative to the project root
@@ -23,6 +29,7 @@ else:
 AUDIO_DIR = os.path.join(PROJECT_ROOT, "lofi_mix_output")
 VIDEO_DIR = os.path.join(PROJECT_ROOT, "video_editor", "dist")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "bgm_output")
+PREVIEW_DIR = os.path.join(OUTPUT_DIR, "previews")
 LOFI_SCRIPT = os.path.join(PROJECT_ROOT, "tools", "generate_lofi_mix.py")
 
 import sys
@@ -32,7 +39,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 # Ensure directories exist
-for d in [OUTPUT_DIR, AUDIO_DIR]:
+for d in [OUTPUT_DIR, AUDIO_DIR, PREVIEW_DIR]:
     if not os.path.exists(d):
         os.makedirs(d)
 
@@ -73,36 +80,111 @@ def _update_image_preview(image_path, image_scale, image_offset_x, image_offset_
         visual_mode=visual_mode,
     )
 
+
+def _build_visual_preview(
+    visual_mode,
+    video_dropdown_path,
+    video_upload_path,
+    image_path,
+    rotation_period,
+    image_scale,
+    image_offset_x,
+    image_offset_y,
+):
+    """Phase 2/3で共通利用するプレビュー生成ラッパー。"""
+    cleanup_previews(PREVIEW_DIR)
+    try:
+        return create_visual_preview(
+            visual_mode=visual_mode,
+            video_dropdown_path=video_dropdown_path,
+            video_upload_path=video_upload_path,
+            image_path=image_path,
+            rotation_period=rotation_period,
+            image_scale=image_scale,
+            image_offset_x=image_offset_x,
+            image_offset_y=image_offset_y,
+            preview_dir=PREVIEW_DIR,
+        )
+    except ValueError as error:
+        raise gr.Error(str(error))
+
+
+def _build_phase3_combined_preview(
+    audio_path,
+    visual_mode,
+    video_path,
+    image_path,
+    rotation_period,
+    image_scale,
+    image_offset_x,
+    image_offset_y,
+):
+    """Phase 3の音声+映像プレビューを生成する。"""
+    cleanup_previews(PREVIEW_DIR)
+    try:
+        return create_combined_preview(
+            audio_path=audio_path,
+            visual_mode=visual_mode,
+            video_path=video_path,
+            image_path=image_path,
+            rotation_period=rotation_period,
+            image_scale=image_scale,
+            image_offset_x=image_offset_x,
+            image_offset_y=image_offset_y,
+            preview_dir=PREVIEW_DIR,
+            preview_duration=8.0,
+        )
+    except ValueError as error:
+        raise gr.Error(str(error))
+
 # --- Wrappers ---
 def generate_lofi_wrapper(num_tracks, track_duration, custom_prompt):
-    """Lofi生成スクリプトを実行"""
+    """Lofi生成スクリプトを実行 (ジェネレータ: ログをリアルタイム表示)"""
     try:
+        before_choices = get_audio_choices()
         python_exe = os.sys.executable
         cmd = [
-            python_exe, LOFI_SCRIPT,
+            python_exe, "-u", LOFI_SCRIPT,
             "--num_tracks", str(int(num_tracks)),
-            "--track_duration", str(int(track_duration))
+            "--track_duration", str(int(track_duration)),
+            "--output_dir", AUDIO_DIR,
         ]
-        
-        # カスタムプロンプトがあれば追加
+
         if custom_prompt and custom_prompt.strip():
             cmd.extend(["--prompt", custom_prompt.strip()])
-            gr.Info(f"生成中: {custom_prompt} ({int(num_tracks)}曲)...")
-        else:
-            gr.Info(f"Lofi生成中 ({int(num_tracks)}曲)...")
-        
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        stdout, stderr = process.communicate()
-        
+
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+        )
+
+        log_lines = []
+        for line in process.stdout:
+            log_lines.append(line.rstrip())
+            log_text = "\n".join(log_lines[-50:])
+            yield log_text, gr.update()
+
+        process.wait()
+        full_log = "\n".join(log_lines)
+
         if process.returncode != 0:
-            raise Exception(f"スクリプトエラー: {stderr}")
-            
-        gr.Info("音楽生成完了！")
-        
-        # リストを更新して最新を選択
+            yield full_log + "\n\n[ERROR] 生成スクリプトが異常終了しました。", gr.update()
+            return
+
         choices = get_audio_choices()
-        return gr.update(choices=choices, value=choices[0] if choices else None)
-        
+        if len(choices) <= len(before_choices):
+            yield (
+                full_log + "\n\n[WARNING] 音楽ファイルが生成されませんでした。"
+                "\nACE-Step APIサーバー未起動の可能性があります。",
+                gr.update(),
+            )
+            return
+
+        yield (
+            full_log + "\n\n[DONE] 音楽生成完了！",
+            gr.update(choices=choices, value=choices[0] if choices else None),
+        )
+
     except Exception as e:
         raise gr.Error(f"生成エラー: {str(e)}")
 
@@ -197,6 +279,13 @@ css = """
 
 with gr.Blocks(title="BGM Generator Wizard") as app:
     gr.Markdown("# 🧙‍♂️ 作業用BGM動画作成ウィザード")
+
+    # Health Badge
+    with gr.Row():
+        health_html = gr.HTML(value="<span style='font-size:0.9em;'>Checking...</span>")
+        refresh_health_btn = gr.Button("🔄 API状態更新", size="sm", scale=0)
+    health_timer = gr.Timer(value=30)
+
     # State
     selected_audio = gr.State()
     selected_visual_mode = gr.State(value="動画ループ (Video Loop)")
@@ -233,6 +322,10 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
                         track_duration = gr.Slider(minimum=60, maximum=300, value=120, step=10, label="1曲あたりの長さ (秒)")
                     
                     gen_lofi_btn = gr.Button("✨ 音楽を生成する", variant="secondary")
+                    gen_log_output = gr.Textbox(
+                        label="生成ログ", lines=8, max_lines=15,
+                        interactive=False,
+                    )
 
             with gr.Row(elem_classes="step-nav"):
                 to_phase2_btn = gr.Button(
@@ -290,6 +383,9 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
             with gr.Row(elem_classes="step-nav"):
                 back_to_phase1_btn = gr.Button("⬅ 戻る: 音楽")
                 to_phase3_btn = gr.Button("次へ: 生成と確認 ➡", variant="primary")
+            with gr.Row():
+                phase2_preview_btn = gr.Button("▶ Phase 2 プレビュー更新", variant="secondary")
+            phase2_video_preview = gr.Video(label="Phase 2 動画プレビュー", interactive=False)
 
         # --- PHASE 3: COMBINE ---
         with gr.Group(visible=False) as phase3:
@@ -313,11 +409,37 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
             generate_final_btn = gr.Button("🚀 動画を生成する", variant="primary", scale=2)
             
             output_video_player = gr.Video(label="プレビュー", interactive=False)
+            with gr.Row():
+                phase3_preview_btn = gr.Button("▶ Phase 3 事前プレビュー更新", variant="secondary")
+            phase3_video_preview = gr.Video(label="Phase 3 事前プレビュー", interactive=False)
             
             with gr.Row(elem_classes="step-nav"):
                 back_to_phase2_btn = gr.Button("⬅ 戻る: 映像")
 
+        # --- Preview Cache ---
+        with gr.Accordion("Preview Cache", open=False):
+            cache_info = gr.Markdown("読み込み中...")
+            cleanup_btn = gr.Button("🗑 キャッシュを整理する", size="sm")
+
     # --- LOGIC ---
+
+    # Health Badge
+    app.load(health_badge_html, outputs=health_html)
+    refresh_health_btn.click(health_badge_html, outputs=health_html)
+    health_timer.tick(health_badge_html, outputs=health_html)
+
+    # Cache Info
+    def _cache_info_text():
+        stats = get_preview_stats(PREVIEW_DIR)
+        return f"プレビューファイル: {stats['count']}個 ({stats['size_mb']} MB)"
+
+    def _do_cleanup():
+        deleted = cleanup_previews(PREVIEW_DIR, max_files=0)
+        stats = get_preview_stats(PREVIEW_DIR)
+        return f"{deleted}個のファイルを削除しました。現在: {stats['count']}個 ({stats['size_mb']} MB)"
+
+    app.load(_cache_info_text, outputs=cache_info)
+    cleanup_btn.click(_do_cleanup, outputs=cache_info)
 
     # Phase 1 Logic
     refresh_audio_btn.click(lambda: _choices_update(get_audio_choices()), outputs=audio_dropdown)
@@ -326,7 +448,7 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
     gen_lofi_btn.click(
         generate_lofi_wrapper,
         inputs=[num_tracks, track_duration, custom_prompt],
-        outputs=[audio_dropdown]
+        outputs=[gen_log_output, audio_dropdown],
     )
 
     def go_to_phase2(dropdown_val, upload_val):
@@ -384,6 +506,11 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
         inputs=[image_upload2, image_scale, image_offset_x, image_offset_y, visual_mode],
         outputs=image_preview,
     )
+    phase2_preview_btn.click(
+        _build_visual_preview,
+        inputs=[visual_mode, video_dropdown, video_upload2, image_upload2, rotation_period, image_scale, image_offset_x, image_offset_y],
+        outputs=phase2_video_preview,
+    )
 
     def go_to_phase3(mode, vid_drop, vid_up, img_up, audio_path):
         """Phase 2の入力を検証し、Phase 3の表示データを作る。"""
@@ -421,6 +548,11 @@ with gr.Blocks(title="BGM Generator Wizard") as app:
         final_generation_wrapper,
         inputs=[selected_audio, selected_visual_mode, selected_video, selected_image, rotation_period, image_scale, image_offset_x, image_offset_y, output_filename, test_mode],
         outputs=[output_video_player, output_video_player]
+    )
+    phase3_preview_btn.click(
+        _build_phase3_combined_preview,
+        inputs=[selected_audio, selected_visual_mode, selected_video, selected_image, rotation_period, image_scale, image_offset_x, image_offset_y],
+        outputs=phase3_video_preview,
     )
 
 if __name__ == "__main__":

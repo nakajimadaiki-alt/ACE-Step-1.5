@@ -1,103 +1,120 @@
-# 進捗・実装・課題まとめ
+# BGMワークフロー 現状まとめ (2026-02-17 更新)
 
-## 1. 現状の進捗 (Status)
+## 1. ユーザーがやりたいこと (Goal)
 
-- **BGM生成機能**: 音楽生成 (Lofi) と動画生成 (MoviePy) のコアロジックは実装済み。
-- **UI実装**: Gradioを用いた3段階ウィザード形式のUI (`bgm_generator_ui.py`) を実装。日本語化完了。
-- **設定ファイルの整理**: スクリプトを `others/` ディレクトリへ移動し、パス設定を更新。
-- **画像調整機能**: UIに「サイズ」「位置(X,Y)」スライダーを追加したが、現在**動作不全**。
+- Phase 1で音楽を生成/選択
+- Phase 2で映像素材を調整しながら確認
+- Phase 3で音楽+映像を最終確認して書き出し
+- 「回転ディスク」指定時は、`video_editor`相当の円盤見た目と挙動にする
 
-## 2. 実装内容 (Implementation Details)
+## 2. 設計思想 (Design Principles)
 
-### Frontend: `others/bgm_generator_ui.py`
+- UIは薄く、ロジックは純粋関数/専用モジュールへ分離
+- 不具合時は「成功表示」より「実ファイル検証」を優先
+- プレビューと本生成の責務を明確化
+  - Phase 2: 見た目調整確認
+  - Phase 3: 合成結果(音声+映像)確認
+- 既存パブリックI/Fは維持しつつ内部を置換
 
-- **フレームワーク**: Gradio
-- **構成**:
-  - **Phase 1**: 音楽選択 (既存ファイル or AI生成)
-  - **Phase 2**: 映像選択 (動画ループ or 静止画)
-    - 静止画モードに「回転ディスク」と「固定表示」を用意。
-    - **新機能**: 画像の拡大率 (`image_scale`) と位置オフセット (`image_offset_x`, `image_offset_y`) の入力欄を追加。
-  - **Phase 3**: プレビューと生成実行
+## 3. 実施済みの主な修正
 
-### Backend: `others/generate_bgm_video.py`
+### 3.1 UI構造・遷移
 
-- **ライブラリ**: MoviePy v2.0+
-- **機能**:
-  - 音声と映像の合成。
-  - 静止画モード時、黒背景 (1920x1080) 上での画像合成 (`CompositeVideoClip`) を実装。
-  - 画像の回転アニメーション (`Rotate` エフェクト)。
-  - **新機能**: 引数として `scale`, `offset_x`, `offset_y` を受け取り、`ColorClip` (背景) と `ImageClip` (前景) を合成するロジックを追加。
+- `others/bgm_generator_ui.py`
+  - `app.launch()`位置を修正 (UI構築後に1回)
+  - Phase 1の「次へ」活性を入力状態で制御
+  - Phase 2/3のプレビューボタンを追加
+  - 生成後の出力ファイル存在/サイズチェックを追加
+  - 例外メッセージを改善し、原因追跡しやすくした
 
-## 3. ユーザーの困っていること (Legacy Issues)
+- `others/bgm_ui_flow.py` (新規)
+  - Phase遷移ロジックを純粋関数化
+  - `resolve_phase1_audio_path`, `has_phase1_selection`, `build_phase3_selection`
 
-1. **機能不全**: 「画像の位置調整がない」という要望に対し実装を行ったが、エラー (`AttributeError`) で動かない。
-2. **繰り返すエラー**: 修正対応後もエラーが解消されず、ストレスが溜まっている。
-3. **信頼性の欠如**: 「直した」と言ったのに直っていない。
+### 3.2 映像レンダリング (回転ディスク作り直し)
 
-## 4. 直近のエラー原因 (Diagnosis)
+- `others/generate_bgm_video.py`
+  - オーケストレーター化
+  - `style=="disc"`時は専用ディスクレンダラーを使用
 
-- **エラー内容**: `AttributeError: ... object has no attribute 'page'`
-- **推定原因**: MoviePy v2.0系における `CompositeVideoClip` と `ColorClip`/`ImageClip` の合成処理において、属性の初期化不足またはバージョン非互換な記述がある可能性が高い。特に `ColorClip` の生成や `CompositeVideoClip` へのクリップの渡し方で問題が起きていると考えられる。
+- `others/bgm_disc_renderer.py` (新規)
+  - 円形マスク付きディスク描画
+  - 回転処理
+  - static/disc両方のクリップ生成関数
+  - 旧実装で混入していた「灰色の曲線」(arc) は削除済み
 
----
+### 3.3 プレビュー
 
-## システムワークフローと接続図
+- `others/bgm_preview.py` (更新)
+  - Phase 2の画像調整プレビュー
+  - 回転ディスク選択時は円盤プレビュー表示
 
-このシステムは、Web UI (Frontend) でユーザー入力を受け付け、CLIツール (Backend) を呼び出して動画を生成する構成になっています。
+- `others/bgm_phase_preview.py` (新規)
+  - `create_visual_preview`: Phase 2向け映像プレビュー
+  - `create_combined_preview`: Phase 3向け音声+映像合成プレビュー
 
-## 全体フロー図
+### 3.4 音楽生成 (Phase 1)
 
-```mermaid
-graph TD
-    User[ユーザー] -->|操作| UI[Gradio UI\n(others/bgm_generator_ui.py)]
-    
-    subgraph "Phase 1: Audio"
-        UI -->|Generate Lofi| LofiScript[Lofi Generator\n(tools/generate_lofi_mix.py)]
-        LofiScript -->|Save| AudioFiles[audio/*.mp3]
-        AudioFiles -->|Select| UI
-    end
-    
-    subgraph "Phase 2: Visual"
-        UI -->|Upload/Select| VideoFiles[video/*.mp4]
-        UI -->|Upload| ImageFiles[images/*.jpg/png]
-        UI -->|Settings| Params[パラメータ設定\n(回転, サイズ, 位置)]
-    end
-    
-    subgraph "Phase 3: Generation (Backend)"
-        UI -->|Call Logic| Wrapper[final_generation_wrapper]
-        Wrapper -->|Function Call| GenScript[generate_bgm_video.py\n(generate_bgm_video関数)]
-        
-        GenScript -->|Process| MoviePy[MoviePy Engine]
-        
-        MoviePy -->|Scaling/Offset| Composite[CompositeVideoClip\n(背景+画像合成)]
-        MoviePy -->|Rotation| Rotate[Rotate Effect]
-        MoviePy -->|Audio Mix| AudioMix[Audio Loop/Mix]
-    end
-    
-    MoviePy -->|Output| FinalVideo[bgm_output/*.mp4]
-    FinalVideo -->|Display| UI
+- `tools/generate_lofi_mix.py`
+  - `--prompt`引数を追加 (UIのカスタムプロンプト対応)
+  - `ACESTEP_API_URL`環境変数対応
+  - `ACESTEP_API_URL`の`.strip()`追加 (末尾空白不具合を回避)
+
+- `others/bgm_generator_ui.py`
+  - Lofi生成時に`--output_dir`を明示
+  - 生成前後のファイル数を比較し、未生成ならエラー化
+
+## 4. 追加/更新テスト
+
+- `others/bgm_ui_flow_test.py`
+- `others/generate_bgm_video_test.py`
+- `others/bgm_disc_renderer_test.py`
+- `others/bgm_preview_test.py`
+- `others/bgm_phase_preview_test.py`
+
+現時点で対象テストは通過済み。
+
+## 5. 直近で発生した原因と対策
+
+### 5.1 「音楽生成完了」と出るのに生成されない
+
+- 原因:
+  - APIサーバー未起動
+  - API URLに末尾空白
+  - UI側が実ファイル未確認で成功表示
+- 対策:
+  - API URLのトリム
+  - 生成後ファイル検証追加
+  - エラーメッセージを具体化
+
+### 5.2 「回転ディスクなのに反映されない」
+
+- 原因:
+  - 旧MoviePy実装が`video_editor`仕様と乖離 (矩形回転寄り)
+- 対策:
+  - 円盤専用レンダラーを新規実装し、`disc`時に使用
+
+## 6. 現在の運用上の注意点
+
+- ポート`7860`は競合しやすい。`ACESTEP_API_URL`と実際のAPI起動ポートを一致させること
+- Phase 2のプレビューは主に見た目確認
+- Phase 3の事前プレビューで音声+映像の合成確認を行う
+
+## 7. 推奨起動手順 (再現性重視)
+
+プロジェクトルートで以下:
+
+```powershell
+Start-Process cmd -ArgumentList '/k', '.venv\Scripts\acestep-api.exe --host 127.0.0.1 --port 8001 --no-init'
+Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe others\bgm_generator_ui.py'
 ```
 
-## Frontend と Backend の接続詳細
+補足:
+- `set "KEY=VALUE"`形式を使う (末尾空白混入防止)
+- 2つの`cmd`ウィンドウは閉じない
 
-### 接続ポイント
+## 8. 残課題 / 改善候補
 
-`bgm_generator_ui.py` 内の `final_generation_wrapper` 関数が、`generate_bgm_video.py` の `generate_bgm_video` 関数を直接インポートして呼び出しています。
-
-### データフロー (引数の受け渡し)
-
-| UI Input (Gradio) | Wrapper引数 | Backend引数 (`generate_bgm_video`) | 説明 |
-| :--- | :--- | :--- | :--- |
-| **Selected Audio** | `audio_path` | `audio_path` | 音声ファイルのパス |
-| **Visual Mode** | `visual_mode` | (内部ロジックで分岐) | 動画か静止画かの判定 |
-| **Output Name** | `output_filename` | `output_path` | 出力先パス (bgm_output/...) |
-| **Video File** | `video_path` | `video_path` | 動画ループ時の素材 |
-| **Image File** | `image_path` | `image_path` | 静止画モード時の素材 |
-| **回転周期 (Slider)** | `rotation_period` | `rotation_speed` | `1.0 / rotation_period` で計算 |
-| **サイズ (Slider)** | `image_scale` | `image_scale` | 画像のリサイズ倍率 (例: 1.0) |
-| **位置 X (Slider)** | `image_offset_x` | `image_offset_x` | 中心からのX座標ズレ (px) |
-| **位置 Y (Slider)** | `image_offset_y` | `image_offset_y` | 中心からのY座標ズレ (px) |
-
-### 現在の問題点
-
-この接続部分において、MoviePyの合成処理 (`CompositeVideoClip`) で内部エラーが発生しており、Backend側で処理が落ちている状態です。
+- API起動状態をUIで明示表示するヘルスバッジ追加
+- 音楽生成処理を同期実行からジョブ表示方式へ改善
+- プレビュー生成キャッシュ掃除ポリシー追加 (`bgm_output/previews`)

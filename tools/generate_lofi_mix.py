@@ -1,3 +1,5 @@
+"""ACE-Step APIを使ってLofi素材を生成し、1本のミックス音源を書き出す。"""
+
 import os
 import time
 import json
@@ -9,7 +11,7 @@ from datetime import datetime
 # ==========================================
 # User Configuration (Lofi Architecture)
 # ==========================================
-API_URL = "http://127.0.0.1:7860"
+API_URL = os.getenv("ACESTEP_API_URL", "http://127.0.0.1:7860").strip()
 OUTPUT_DIR = "lofi_mix_output"
 
 # Generator Settings
@@ -34,8 +36,13 @@ SONIC_REFINEMENTS = (
     "Muffled and warm sound, reduce energy in 2-5kHz range. "
     "Apply deep tape saturation (8%), very high spectral centroid around 1000Hz (warmth)."
 )
+CUSTOM_PROMPT = None
 
 def get_random_prompt():
+    """生成プロンプトを返す。`--prompt`指定時は固定文を優先する。"""
+    if CUSTOM_PROMPT:
+        return CUSTOM_PROMPT, None, None
+
     bpm = random.choice(BPMS)
     key = random.choice(KEYS)
     elements = random.sample(DRUM_ELEMENTS, 2)
@@ -106,21 +113,24 @@ import argparse
 # ... existing code ...
 
 def main():
+    """CLI引数を受け取り、Lofi生成とミックスを書き出す。"""
     parser = argparse.ArgumentParser(description="Generate Lofi Mix")
     parser.add_argument("--num_tracks", type=int, default=15, help="Number of tracks to generate")
     parser.add_argument("--track_duration", type=int, default=240, help="Duration per track in seconds")
     parser.add_argument("--output_dir", type=str, default="lofi_mix_output", help="Output directory")
+    parser.add_argument("--prompt", type=str, default="", help="Optional fixed prompt text for all tracks")
     args = parser.parse_args()
 
     # Override global settings with args
-    global NUM_TRACKS, TRACK_DURATION, OUTPUT_DIR
+    global NUM_TRACKS, TRACK_DURATION, OUTPUT_DIR, CUSTOM_PROMPT
     NUM_TRACKS = args.num_tracks
     TRACK_DURATION = args.track_duration
     OUTPUT_DIR = args.output_dir
+    CUSTOM_PROMPT = args.prompt.strip() if args.prompt else None
 
     if not check_server():
-        print("Error: ACE-Step server is not running or not accessible at http://127.0.0.1:7860")
-        print("Please start it with: uv run acestep --enable-api ...")
+        print(f"Error: ACE-Step server is not running or not accessible at {API_URL}")
+        print("Please start ACE-Step API server and check ACESTEP_API_URL if needed.")
         return
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

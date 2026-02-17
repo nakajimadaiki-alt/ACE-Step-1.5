@@ -63,13 +63,6 @@ def _render_disc_rgba(
         outline=(120, 120, 120, 160),
         width=max(2, disc_diameter // 320),
     )
-    draw.arc(
-        (disc_diameter * 0.08, disc_diameter * 0.08, disc_diameter * 0.92, disc_diameter * 0.92),
-        start=300,
-        end=342,
-        fill=(255, 255, 255, 90),
-        width=max(4, disc_diameter // 180),
-    )
     spindle_radius = max(6, disc_diameter // 55)
     cx = cy = disc_diameter // 2
     draw.ellipse(
