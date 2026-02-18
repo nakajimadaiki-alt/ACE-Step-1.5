@@ -25,12 +25,12 @@
 - [🔬 Benchmark](#-benchmark)
 
 ## 📝 Abstract
+
 🚀 We present ACE-Step v1.5, a highly efficient open-source music foundation model that brings commercial-grade generation to consumer hardware. On commonly used evaluation metrics, ACE-Step v1.5 achieves quality beyond most commercial music models while remaining extremely fast—under 2 seconds per full song on an A100 and under 10 seconds on an RTX 3090. The model runs locally with less than 4GB of VRAM, and supports lightweight personalization: users can train a LoRA from just a few songs to capture their own style.
 
 🌉 At its core lies a novel hybrid architecture where the Language Model (LM) functions as an omni-capable planner: it transforms simple user queries into comprehensive song blueprints—scaling from short loops to 10-minute compositions—while synthesizing metadata, lyrics, and captions via Chain-of-Thought to guide the Diffusion Transformer (DiT). ⚡ Uniquely, this alignment is achieved through intrinsic reinforcement learning relying solely on the model's internal mechanisms, thereby eliminating the biases inherent in external reward models or human preferences. 🎚️
 
 🔮 Beyond standard synthesis, ACE-Step v1.5 unifies precise stylistic control with versatile editing capabilities—such as cover generation, repainting, and vocal-to-BGM conversion—while maintaining strict adherence to prompts across 50+ languages. This paves the way for powerful tools that seamlessly integrate into the creative workflows of music artists, producers, and content creators. 🎸
-
 
 ## ✨ Features
 
@@ -39,11 +39,13 @@
 </p>
 
 ### ⚡ Performance
+
 - ✅ **Ultra-Fast Generation** — Under 2s per full song on A100, under 10s on RTX 3090 (0.5s to 10s on A100 depending on think mode & diffusion steps)
 - ✅ **Flexible Duration** — Supports 10 seconds to 10 minutes (600s) audio generation
 - ✅ **Batch Generation** — Generate up to 8 songs simultaneously
 
 ### 🎵 Generation Quality
+
 - ✅ **Commercial-Grade Output** — Quality beyond most commercial music models (between Suno v4.5 and Suno v5)
 - ✅ **Rich Style Support** — 1000+ instruments and styles with fine-grained timbre description
 - ✅ **Multi-Language Lyrics** — Supports 50+ languages with lyrics prompt for structure & style control
@@ -67,6 +69,7 @@
 | ✅ Quality Scoring | Automatic quality assessment for generated audio |
 
 ## Staying ahead
+
 -----------------
 Star ACE-Step on GitHub and be instantly notified of new releases
 ![](assets/star.gif)
@@ -74,7 +77,7 @@ Star ACE-Step on GitHub and be instantly notified of new releases
 ## ⚡ Quick Start
 
 > **Requirements:** Python 3.11-3.12, CUDA GPU recommended (also supports MPS / ROCm / Intel XPU / CPU)
-> 
+>
 > **Note:** ROCm on Windows requires Python 3.12 (AMD officially provides Python 3.12 wheels only)
 
 ```bash
@@ -94,7 +97,7 @@ uv run acestep
 uv run acestep-api
 ```
 
-Open http://localhost:7860 (Gradio) or http://localhost:8001 (API).
+Open <http://localhost:7860> (Gradio) or <http://localhost:8001> (API).
 
 > 📦 **Windows users:** A [portable package](https://files.acemusic.ai/acemusic/win/ACE-Step-1.5.7z) with pre-installed dependencies is available. See [Installation Guide](./docs/en/INSTALL.md#-windows-portable-package).
 
@@ -153,6 +156,20 @@ LANGUAGE=en
 ```
 
 > 📖 **Script configuration & customization:** [English](./docs/en/INSTALL.md#-launch-scripts) | [中文](./docs/zh/INSTALL.md#-启动脚本) | [日本語](./docs/ja/INSTALL.md#-起動スクリプト)
+
+## 🎵 BGM Generator (推奨起動手順)
+
+プロジェクトルートで以下（PowerShell）:
+
+```powershell
+Start-Process cmd -ArgumentList '/k', '.venv\Scripts\acestep-api.exe --host 127.0.0.1 --port 8001 --no-init'
+Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe others\bgm_generator_ui.py'
+```
+
+補足:
+
+- `set "KEY=VALUE"`形式を使う (末尾空白混入防止)
+- 2つの`cmd`ウィンドウは閉じない
 
 ## 📚 Documentation
 
@@ -258,7 +275,7 @@ This project is licensed under [MIT](./LICENSE)
 ACE-Step enables original music generation across diverse genres, with applications in creative production, education, and entertainment. While designed to support positive and artistic use cases, we acknowledge potential risks such as unintentional copyright infringement due to stylistic similarity, inappropriate blending of cultural elements, and misuse for generating harmful content. To ensure responsible use, we encourage users to verify the originality of generated works, clearly disclose AI involvement, and obtain appropriate permissions when adapting protected styles or materials. By using ACE-Step, you agree to uphold these principles and respect artistic integrity, cultural diversity, and legal compliance. The authors are not responsible for any misuse of the model, including but not limited to copyright violations, cultural insensitivity, or the generation of harmful content.
 
 🔔 Important Notice  
-The only official website for the ACE-Step project is our GitHub Pages site.    
+The only official website for the ACE-Step project is our GitHub Pages site.
  We do not operate any other websites.  
 🚫 Fake domains include but are not limited to:
 ac\*\*p.com, a\*\*p.org, a\*\*\*c.org  
@@ -268,17 +285,16 @@ ac\*\*p.com, a\*\*p.org, a\*\*\*c.org
 
 This project is co-led by ACE Studio and StepFun.
 
-
 ## 📖 Citation
 
 If you find this project useful for your research, please consider citing:
 
 ```BibTeX
 @misc{gong2026acestep,
-	title={ACE-Step 1.5: Pushing the Boundaries of Open-Source Music Generation},
-	author={Junmin Gong, Yulin Song, Wenxiao Zhao, Sen Wang, Shengyuan Xu, Jing Guo}, 
-	howpublished={\url{https://github.com/ace-step/ACE-Step-1.5}},
-	year={2026},
-	note={GitHub repository}
+ title={ACE-Step 1.5: Pushing the Boundaries of Open-Source Music Generation},
+ author={Junmin Gong, Yulin Song, Wenxiao Zhao, Sen Wang, Shengyuan Xu, Jing Guo}, 
+ howpublished={\url{https://github.com/ace-step/ACE-Step-1.5}},
+ year={2026},
+ note={GitHub repository}
 }
 ```
