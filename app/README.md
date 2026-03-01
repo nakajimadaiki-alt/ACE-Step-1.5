@@ -25,14 +25,14 @@ ACE-Step API を利用した **AI音楽生成** と **映像合成** のワー�
 ## 概要
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Phase 1          Phase 2          Phase 3          │
-│  音楽の準備  ───►  映像の選択  ───►  生成・確認     │
-│                                                     │
-│  ・ライブラリ選択    ・動画ループ      ・テストモード │
-│  ・AI 生成           ・回転ディスク    ・本番書き出し │
-│  ・ファイルアップ    ・静止画固定      ・事前プレビュー│
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  シングルページ UI (全設定を1画面で)                  │
+│                                                      │
+│  🎵 音楽  ライブラリ選択 / アップロード / AI 生成     │
+│  📺 映像  動画ループ / 回転ディスク / 静止画固定       │
+│  ⚙️ 出力  ファイル名 / テストモード                   │
+│  🚀 生成ボタン → デバッグログ / エラー詳細表示         │
+└──────────────────────────────────────────────────────┘
 ```
 
 ### 主な機能
@@ -93,7 +93,7 @@ pip install -r requirements/requirements.txt
 Start-Process cmd -ArgumentList '/k', '.venv\Scripts\acestep-api.exe --host 127.0.0.1 --port 8001 --no-init'
 
 # ターミナル 2: BGM Generator UI
-Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe others\bgm_generator_ui.py'
+Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe app\bgm_generator_ui.py'
 ```
 
 ### Linux / macOS
@@ -103,7 +103,7 @@ Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:800
 acestep-api --host 127.0.0.1 --port 8001 --no-init
 
 # ターミナル 2
-ACESTEP_API_URL=http://127.0.0.1:8001 python others/bgm_generator_ui.py
+ACESTEP_API_URL=http://127.0.0.1:8001 python app/bgm_generator_ui.py
 ```
 
 ブラウザが自動で開き、Gradio UI が表示されます。
@@ -210,7 +210,7 @@ python tools/generate_lofi_mix.py \
 
 ```
 ACE-Step-1.5/
-├── others/                         # BGM ワークフロー本体
+├── app/                         # BGM ワークフロー本体
 │   ├── bgm_generator_ui.py        # Gradio UI (メイン)
 │   ├── bgm_ui_flow.py             # Phase 遷移ロジック (純粋関数)
 │   ├── bgm_health.py              # API ヘルスチェック
@@ -221,7 +221,8 @@ ACE-Step-1.5/
 │   └── generate_bgm_video.py      # 動画生成オーケストレーター
 │
 ├── tools/
-│   └── generate_lofi_mix.py       # Lofi 音楽生成 CLI
+│   ├── generate_lofi_mix.py       # Lofi 音楽生成 CLI
+│   └── auto_generate.py           # .txt 設定ファイルから自動生成 (noUI)
 │
 ├── lofi_mix_output/                # 生成された音楽ファイル
 ├── video_editor/dist/              # 動画ループ素材

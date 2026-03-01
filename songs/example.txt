@@ -1,0 +1,80 @@
+# ============================================================
+# BGM自動生成 設定ファイル
+# 使い方: python tools/auto_generate.py songs/example.txt
+# ============================================================
+
+# ---- 音楽 ----
+
+# 音楽スタイルの説明 (ジャンル・楽器・雰囲気・ボーカル等)
+caption = chill lo-fi hip hop, vintage rhodes piano, soft muted kick, warm analog bass, gentle tape hiss, late night tokyo street vibe, mellow, rounded transients, analog warmth
+
+# 曲の長さ (秒)
+duration = 180
+
+# BPM (省略するとモデルが自動決定)
+# bpm = 75
+
+# キースケール (省略するとモデルが自動決定)
+# keyscale = C Major
+
+# 乱数シード (-1 = ランダム毎回、固定値で再現性あり)
+# seed = -1
+
+# 推論ステップ数 (多いほど高品質・低ノイズ。デフォルト60、最低30)
+steps = 60
+
+# ガイダンススケール (3.5〜5.0が自然な音。7以上はとげとげしくなりやすい)
+guidance_scale = 4.5
+
+# 後処理: ローパスフィルター + ノーマライズ (true にすると音がまろやかになる)
+post_process = true
+lpf_cutoff = 10000
+fade_in  = 1.0   # フェードイン (秒)
+fade_out = 6.0   # フェードアウト (秒)
+
+
+# ---- 映像 ----
+
+# 映像モード: video | disc | static
+#   video  = 動画ファイルをループ
+#   disc   = 画像を回転ディスクとして表示
+#   static = 画像を固定表示
+visual = disc
+
+# visual=video のとき: 使用する動画ファイルパス
+# (省略すると video_editor/dist/ から最新ファイルを自動選択)
+# video = ./video_editor/dist/export_1771256561904.mp4
+
+# visual=disc または static のとき: 使用する画像ファイルパス
+image = ../image.png
+
+# 回転周期 (disc のみ有効): ディスクが1回転するのにかかる秒数
+rotation_period = 12
+
+# 画像の拡大率 (disc / static)
+image_scale = 1.0
+
+# 画像の表示位置オフセット (px)
+# image_offset_x = 0
+# image_offset_y = 0
+
+
+# ---- 出力 ----
+
+# 出力ファイル名 (.mp4 は自動付与。省略するとファイル名と同名)
+output = example_lofi_disc
+
+
+# ---- 歌詞 (ボーカル曲の場合のみ) ----
+# 歌詞が不要な場合は [lyrics]～[/lyrics] ブロックを削除またはコメントアウト
+# 外部ファイルで管理する場合: lyrics_file = ./songs/lyrics/my_lyrics.txt
+
+# [lyrics]
+# [Verse]
+# Walking through the quiet streets at night
+# The city sleeps beneath the amber light
+#
+# [Chorus]
+# Let the music carry you away
+# Into a dream where nothing fades
+# [/lyrics]

@@ -4,7 +4,7 @@ import os
 
 import requests
 
-API_URL = os.getenv("ACESTEP_API_URL", "http://127.0.0.1:7860").strip()
+API_URL = os.getenv("ACESTEP_API_URL", "http://127.0.0.1:8001").strip()
 
 
 def check_health() -> bool:

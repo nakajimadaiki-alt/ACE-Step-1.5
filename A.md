@@ -20,24 +20,24 @@
 
 ### 3.1 UI構造・遷移
 
-- `others/bgm_generator_ui.py`
+- `app/bgm_generator_ui.py`
   - `app.launch()`位置を修正 (UI構築後に1回)
   - Phase 1の「次へ」活性を入力状態で制御
   - Phase 2/3のプレビューボタンを追加
   - 生成後の出力ファイル存在/サイズチェックを追加
   - 例外メッセージを改善し、原因追跡しやすくした
 
-- `others/bgm_ui_flow.py` (新規)
+- `app/bgm_ui_flow.py` (新規)
   - Phase遷移ロジックを純粋関数化
   - `resolve_phase1_audio_path`, `has_phase1_selection`, `build_phase3_selection`
 
 ### 3.2 映像レンダリング (回転ディスク作り直し)
 
-- `others/generate_bgm_video.py`
+- `app/generate_bgm_video.py`
   - オーケストレーター化
   - `style=="disc"`時は専用ディスクレンダラーを使用
 
-- `others/bgm_disc_renderer.py` (新規)
+- `app/bgm_disc_renderer.py` (新規)
   - 円形マスク付きディスク描画
   - 回転処理
   - static/disc両方のクリップ生成関数
@@ -45,11 +45,11 @@
 
 ### 3.3 プレビュー
 
-- `others/bgm_preview.py` (更新)
+- `app/bgm_preview.py` (更新)
   - Phase 2の画像調整プレビュー
   - 回転ディスク選択時は円盤プレビュー表示
 
-- `others/bgm_phase_preview.py` (新規)
+- `app/bgm_phase_preview.py` (新規)
   - `create_visual_preview`: Phase 2向け映像プレビュー
   - `create_combined_preview`: Phase 3向け音声+映像合成プレビュー
 
@@ -60,17 +60,17 @@
   - `ACESTEP_API_URL`環境変数対応
   - `ACESTEP_API_URL`の`.strip()`追加 (末尾空白不具合を回避)
 
-- `others/bgm_generator_ui.py`
+- `app/bgm_generator_ui.py`
   - Lofi生成時に`--output_dir`を明示
   - 生成前後のファイル数を比較し、未生成ならエラー化
 
 ## 4. 追加/更新テスト
 
-- `others/bgm_ui_flow_test.py`
-- `others/generate_bgm_video_test.py`
-- `others/bgm_disc_renderer_test.py`
-- `others/bgm_preview_test.py`
-- `others/bgm_phase_preview_test.py`
+- `app/bgm_ui_flow_test.py`
+- `app/generate_bgm_video_test.py`
+- `app/bgm_disc_renderer_test.py`
+- `app/bgm_preview_test.py`
+- `app/bgm_phase_preview_test.py`
 
 現時点で対象テストは通過済み。
 
@@ -106,7 +106,7 @@
 
 ```powershell
 Start-Process cmd -ArgumentList '/k', '.venv\Scripts\acestep-api.exe --host 127.0.0.1 --port 8001 --no-init'
-Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe others\bgm_generator_ui.py'
+Start-Process cmd -ArgumentList '/k', 'set "ACESTEP_API_URL=http://127.0.0.1:8001" && .venv\Scripts\python.exe app\bgm_generator_ui.py'
 ```
 
 補足:

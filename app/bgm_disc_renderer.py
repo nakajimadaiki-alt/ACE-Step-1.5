@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
-from moviepy import ColorClip, CompositeVideoClip, ImageClip
+from moviepy import ColorClip, CompositeVideoClip, ImageClip, VideoClip
 from PIL import Image, ImageDraw
-
-try:
-    from moviepy.video.fx import Rotate
-except ImportError:
-    import moviepy.video.fx as vfx
-
-    Rotate = vfx.Rotate
 
 CANVAS_SIZE = (1920, 1080)
 
@@ -113,7 +106,11 @@ def build_disc_clip(
     offset_x: float,
     offset_y: float,
 ):
-    """円盤モードのクリップを生成する。"""
+    """円盤モードのクリップを生成する。
+
+    MoviePy の Rotate エフェクトは RGBA クリップで回転中心がずれる場合があるため、
+    PIL で直接回転させて VideoClip を構築する。
+    """
     image_rgba = _load_rgba(image_path)
     disc_diameter = min(int(CANVAS_SIZE[1] * 0.85), int(CANVAS_SIZE[0] * 0.5))
     object_x_pct, object_y_pct = _object_position_from_pixel_offset(offset_x, offset_y)
@@ -124,8 +121,19 @@ def build_disc_clip(
         object_x_pct=object_x_pct,
         object_y_pct=object_y_pct,
     )
-    disc_clip = ImageClip(disc_rgba).with_duration(duration)
-    disc_clip = disc_clip.with_effects([Rotate(lambda t: float(rotation_speed) * 360.0 * t, expand=False)])
+
+    disc_pil = Image.fromarray(disc_rgba, "RGBA")
     pos_x = (CANVAS_SIZE[0] - disc_diameter) // 2
     pos_y = (CANVAS_SIZE[1] - disc_diameter) // 2
-    return _compose_on_black(disc_clip, duration, (pos_x, pos_y))
+    canvas_size_wh = CANVAS_SIZE  # (width, height)
+
+    def make_frame(t):
+        # PIL.Image.rotate は center を基準に回転 (expand=False で元サイズ維持)
+        # 正の角度 = 反時計回りなので負にして時計回りにする
+        angle = -(float(rotation_speed) * 360.0 * t) % 360
+        rotated = disc_pil.rotate(angle, resample=Image.Resampling.BILINEAR, expand=False)
+        canvas = Image.new("RGB", canvas_size_wh, (0, 0, 0))
+        canvas.paste(rotated, (pos_x, pos_y), rotated)
+        return np.array(canvas)
+
+    return VideoClip(make_frame, duration=duration)
