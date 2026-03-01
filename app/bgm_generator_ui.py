@@ -34,7 +34,7 @@ from generate_bgm_video import generate_bgm_video
 # パス定数
 # ---------------------------------------------------------------------------
 current_dir = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(current_dir) if os.path.basename(current_dir) == "others" else current_dir
+PROJECT_ROOT = os.path.dirname(current_dir) if os.path.basename(current_dir) in ("others", "app") else current_dir
 
 AUDIO_DIR   = os.path.join(PROJECT_ROOT, "lofi_mix_output")
 VIDEO_DIR   = os.path.join(PROJECT_ROOT, "video_editor", "dist")
@@ -354,7 +354,7 @@ css = """
 # ---------------------------------------------------------------------------
 # UI 構築
 # ---------------------------------------------------------------------------
-with gr.Blocks(title="BGM Generator", css=css) as app:
+with gr.Blocks(title="BGM Generator") as app:
     gr.Markdown("# BGM 動画生成ツール")
 
     # API ヘルスバッジ
@@ -493,7 +493,6 @@ with gr.Blocks(title="BGM Generator", css=css) as app:
                 lines=18,
                 max_lines=40,
                 interactive=False,
-                show_copy_button=True,
                 placeholder="ここに生成ログとエラーの詳細が表示されます。",
             )
 

@@ -7,11 +7,12 @@ import random
 import requests
 from pydub import AudioSegment
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs, unquote
 
 # ==========================================
 # User Configuration (Lofi Architecture)
 # ==========================================
-API_URL = os.getenv("ACESTEP_API_URL", "http://127.0.0.1:7860").strip()
+API_URL = os.getenv("ACESTEP_API_URL", "http://127.0.0.1:8001").strip()
 OUTPUT_DIR = "lofi_mix_output"
 
 # Generator Settings
@@ -78,6 +79,7 @@ def generate_track(index):
         "num_inference_steps": 25, # Slightly higher for better quality
         "guidance_scale": 7.0,
         "seed": -1,
+        "thinking": True,
     }
 
     try:
@@ -100,9 +102,14 @@ def generate_track(index):
             data = query.json()['data'][0]
             if data['status'] == 1: # Succeeded
                 result_json = json.loads(data['result'])
-                file_path = result_json[0]['file']
-                print(f"  Generation complete: {file_path}")
-                return file_path
+                file_url = result_json[0]['file']
+                print(f"  Generation complete: {file_url}")
+                # /v1/audio?path=<url-encoded-path> → 実ファイルパスに変換
+                parsed = urlparse(file_url)
+                qs = parse_qs(parsed.query)
+                if 'path' in qs:
+                    return unquote(qs['path'][0])
+                return file_url
                 
     except Exception as e:
         print(f"Error during generation: {e}")

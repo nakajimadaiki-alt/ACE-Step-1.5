@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(xargs wc:*)",
+      "Bash(curl:*)",
+      "Bash(ACESTEP_API_URL=\"http://127.0.0.1:8001\" .venv/Scripts/python.exe:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe:*)",
+      "Bash(ls:*)",
+      "Bash(Start-Process cmd:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git rm:*)",
+      "Bash(git mv:*)",
+      "Bash(sed:*)"
     ]
   }
 }

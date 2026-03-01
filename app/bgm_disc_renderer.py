@@ -49,20 +49,12 @@ def _render_disc_rgba(
     mask_draw.ellipse((0, 0, disc_diameter - 1, disc_diameter - 1), fill=255)
     container.putalpha(mask)
 
-    # 円盤感を強める非対称ハイライトを追加し、回転が視認できるようにする。
+    # 円盤の縁にハイライトを追加する。
     draw = ImageDraw.Draw(container, "RGBA")
     draw.ellipse(
         (0, 0, disc_diameter - 1, disc_diameter - 1),
         outline=(120, 120, 120, 160),
         width=max(2, disc_diameter // 320),
-    )
-    spindle_radius = max(6, disc_diameter // 55)
-    cx = cy = disc_diameter // 2
-    draw.ellipse(
-        (cx - spindle_radius, cy - spindle_radius, cx + spindle_radius, cy + spindle_radius),
-        fill=(34, 34, 34, 255),
-        outline=(88, 88, 88, 255),
-        width=max(2, disc_diameter // 500),
     )
 
     return np.array(container)
